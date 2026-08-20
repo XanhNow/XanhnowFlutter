@@ -32,3 +32,4 @@ class AppConfig {
   final String objectStorageBaseUrl;
   final String contractVersion;
 }
+

@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../../core/errors/app_exception.dart';
 import '../../../../core/session/auth_session_cubit.dart';
 import '../../data/models/security_models.dart';
 import '../../domain/auth_repository.dart';
@@ -211,24 +212,55 @@ class RegistrationBloc extends Bloc<RegistrationEvent, RegistrationState> {
         userId: userId,
         displayName: displayName,
       );
-      TokenPair? tokens;
-      AuthIdentity? identity = state.identity;
-      if (phoneNumber != null && password != null) {
-        final login = await _repository.loginWithPassword(
-          phoneNumber: phoneNumber,
-          password: password,
-        );
-        tokens = login.tokens;
-        identity = login.identity ?? identity;
-      }
+      final loginState = await _loginAfterPasskey(
+        phoneNumber: phoneNumber,
+        password: password,
+        fallbackIdentity: state.identity,
+      );
       emit(
         state.copyWith(
           step: RegistrationStep.completed,
-          tokens: tokens,
-          identity: identity,
-          message: tokens == null
+          tokens: loginState.tokens,
+          identity: loginState.identity,
+          message: loginState.tokens == null
               ? 'Registration ${result.registrationStatus}. Please log in.'
               : 'Passkey đã hoàn tất. Chọn Xác Thực Smart hoặc Bỏ qua.',
+        ),
+      );
+    } on AppException catch (error) {
+      if (_isRegistrationAlreadyCompleted(error)) {
+        try {
+          final loginState = await _loginAfterPasskey(
+            phoneNumber: phoneNumber,
+            password: password,
+            fallbackIdentity: state.identity,
+          );
+          emit(
+            state.copyWith(
+              step: RegistrationStep.completed,
+              tokens: loginState.tokens,
+              identity: loginState.identity,
+              message: loginState.tokens == null
+                  ? 'Registration already completed. Please log in.'
+                  : 'Passkey đã hoàn tất. Chọn Xác Thực Smart hoặc Bỏ qua.',
+            ),
+          );
+          return;
+        } catch (loginError) {
+          emit(
+            state.copyWith(
+              step: RegistrationStep.failure,
+              message: loginError.toString(),
+            ),
+          );
+          return;
+        }
+      }
+
+      emit(
+        state.copyWith(
+          step: RegistrationStep.failure,
+          message: error.toString(),
         ),
       );
     } catch (error) {
@@ -239,6 +271,32 @@ class RegistrationBloc extends Bloc<RegistrationEvent, RegistrationState> {
         ),
       );
     }
+  }
+
+  Future<_PostPasskeyLoginState> _loginAfterPasskey({
+    required String? phoneNumber,
+    required String? password,
+    required AuthIdentity? fallbackIdentity,
+  }) async {
+    if (phoneNumber == null || password == null) {
+      return _PostPasskeyLoginState(tokens: null, identity: fallbackIdentity);
+    }
+
+    final login = await _repository.loginWithPassword(
+      phoneNumber: phoneNumber,
+      password: password,
+    );
+    return _PostPasskeyLoginState(
+      tokens: login.tokens,
+      identity: login.identity ?? fallbackIdentity,
+    );
+  }
+
+  bool _isRegistrationAlreadyCompleted(AppException error) {
+    return error.statusCode == 409 &&
+        (error.code == 'CONFLICT' ||
+            error.code == 'SECURITY_REGISTRATION_ALREADY_COMPLETED') &&
+        error.message.contains('Registration has already been completed');
   }
 
   Future<void> _onSmartOtpSkipped(
@@ -436,4 +494,11 @@ class RegistrationBloc extends Bloc<RegistrationEvent, RegistrationState> {
       );
     }
   }
+}
+
+class _PostPasskeyLoginState {
+  const _PostPasskeyLoginState({required this.tokens, required this.identity});
+
+  final TokenPair? tokens;
+  final AuthIdentity? identity;
 }
