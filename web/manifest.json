@@ -1,6 +1,6 @@
 {
-    "name": "xanhnow_auth_module",
-    "short_name": "xanhnow_auth_module",
+    "name": "XanhNow Flutter",
+    "short_name": "XanhNow",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

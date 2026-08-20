@@ -5,11 +5,9 @@ import 'package:uuid/uuid.dart';
 import '../../features/auth/data/models/security_models.dart';
 
 class DeviceContextService {
-  DeviceContextService({
-    FlutterSecureStorage? storage,
-    Uuid? uuid,
-  })  : _storage = storage ?? const FlutterSecureStorage(),
-        _uuid = uuid ?? const Uuid();
+  DeviceContextService({FlutterSecureStorage? storage, Uuid? uuid})
+    : _storage = storage ?? const FlutterSecureStorage(),
+      _uuid = uuid ?? const Uuid();
 
   static const _deviceIdKey = 'xanhnow.device_context.device_id';
 

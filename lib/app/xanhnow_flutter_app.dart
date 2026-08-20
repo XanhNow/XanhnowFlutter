@@ -14,10 +14,13 @@ import '../features/auth/domain/auth_repository.dart';
 import '../features/auth/presentation/bloc/login_bloc.dart';
 import '../features/auth/presentation/bloc/registration_bloc.dart';
 import '../features/auth/presentation/pages/auth_shell_page.dart';
+import '../features/profile/data/customer_profile_api.dart';
+import '../features/profile/data/object_storage_api.dart';
+import '../features/profile/domain/profile_repository.dart';
 import 'home_page.dart';
 
-class XanhNowAuthApp extends StatelessWidget {
-  const XanhNowAuthApp({required this.config, super.key});
+class XanhNowFlutterApp extends StatelessWidget {
+  const XanhNowFlutterApp({required this.config, super.key});
 
   final AppConfig config;
 
@@ -39,6 +42,28 @@ class XanhNowAuthApp extends StatelessWidget {
         RepositoryProvider(create: (_) => SmartOtpDeviceCryptoService()),
         RepositoryProvider(
           create: (context) => SecurityAuthApi(context.read<ApiClient>()),
+        ),
+        RepositoryProvider(
+          create: (context) => CustomerProfileApi(
+            ApiClient(
+              baseUrl: config.customerBaseUrl,
+              tokenStore: context.read<SecureTokenStore>(),
+            ),
+          ),
+        ),
+        RepositoryProvider(
+          create: (context) => ObjectStorageApi(
+            ApiClient(
+              baseUrl: config.objectStorageBaseUrl,
+              tokenStore: context.read<SecureTokenStore>(),
+            ),
+          ),
+        ),
+        RepositoryProvider(
+          create: (context) => ProfileRepository(
+            api: context.read<CustomerProfileApi>(),
+            objectStorageApi: context.read<ObjectStorageApi>(),
+          ),
         ),
         RepositoryProvider(
           create: (context) => AuthRepository(
@@ -74,7 +99,7 @@ class XanhNowAuthApp extends StatelessWidget {
         ],
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
-          title: 'XanhNow Auth',
+          title: 'XanhNow Flutter',
           theme: ThemeData(
             useMaterial3: true,
             colorScheme: ColorScheme.fromSeed(

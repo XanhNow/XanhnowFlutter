@@ -13,12 +13,19 @@ class ApiMetadata {
     required this.timestampUtc,
   });
 
+  const ApiMetadata.empty()
+    : contractVersion = '',
+      correlationId = '',
+      requestId = '',
+      timestampUtc = null;
+
   factory ApiMetadata.fromJson(Map<String, dynamic> json) {
     return ApiMetadata(
       contractVersion: json['contractVersion'] as String? ?? '',
       correlationId: json['correlationId'] as String? ?? '',
       requestId: json['requestId'] as String? ?? '',
-      timestampUtc: DateTime.tryParse(json['timestampUtc'] as String? ?? '') ??
+      timestampUtc:
+          DateTime.tryParse(json['timestampUtc'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
     );
   }
@@ -26,7 +33,7 @@ class ApiMetadata {
   final String contractVersion;
   final String correlationId;
   final String requestId;
-  final DateTime timestampUtc;
+  final DateTime? timestampUtc;
 }
 
 class ApiError {

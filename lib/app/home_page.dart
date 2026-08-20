@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../core/session/auth_session_cubit.dart';
 import '../features/auth/domain/auth_repository.dart';
 import '../features/auth/presentation/pages/auth_shell_page.dart';
+import '../features/profile/presentation/pages/profile_module_page.dart';
 
 const _homeTextColor = Color(0xFF0B2F4A);
 
@@ -75,7 +76,7 @@ class _HomePageState extends State<HomePage> {
       child: Scaffold(
         appBar: AppBar(
           foregroundColor: _homeTextColor,
-          title: const Text('XanhNow Auth'),
+          title: const Text('XanhNow Flutter'),
           actions: [
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -159,6 +160,18 @@ class _HomePageState extends State<HomePage> {
                 icon: Icons.apps_outlined,
                 title: 'Module tiếp theo',
                 value: 'Sẵn sàng nối các module nghiệp vụ của hệ thống.',
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const ProfileModulePage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.assignment_ind_outlined),
+                label: const Text('Mở Profile Module'),
               ),
             ],
           ),

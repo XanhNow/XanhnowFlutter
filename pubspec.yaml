@@ -1,5 +1,5 @@
-name: xanhnow_auth_module
-description: XanhNow mobile Auth/Security module backed by XanhNow.Security.
+name: xanhnow_flutter
+description: XanhNow Flutter customer mobile app.
 publish_to: "none"
 
 version: 0.1.0+1
@@ -16,6 +16,7 @@ dependencies:
   flutter_secure_storage: ^10.0.0-beta.4
   uuid: ^4.5.1
   passkeys: ^2.22.0
+  image_picker: 1.1.2
 
 dev_dependencies:
   flutter_test:

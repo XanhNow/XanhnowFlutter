@@ -1,4 +1,4 @@
-# XanhNow Auth Module
+# XanhNow Flutter
 
 Flutter mobile Auth/Security module for `XanhNow.Security`.
 

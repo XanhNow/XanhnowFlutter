@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xanhnow_auth_module/features/auth/data/models/security_models.dart';
+import 'package:xanhnow_flutter/features/auth/data/models/security_models.dart';
 
 void main() {
   test('RegisterResponse parses mandatory passkey registration status', () {

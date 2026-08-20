@@ -32,7 +32,7 @@ class _AuthShellPageState extends State<AuthShellPage> {
     final text = _AuthText(_language);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('XanhNow Auth'),
+        title: const Text('XanhNow Flutter'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),

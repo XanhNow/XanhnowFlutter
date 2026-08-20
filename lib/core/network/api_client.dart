@@ -74,6 +74,86 @@ class ApiClient {
     return _parse(response, decode, method: 'POST', uri: uri);
   }
 
+  Future<ApiEnvelope<T>> put<T>(
+    String path,
+    Object body,
+    T Function(Object? json) decode, {
+    bool authenticated = true,
+    String? idempotencyKey,
+    Map<String, String>? extraHeaders,
+  }) async {
+    final uri = _uri(path);
+    final response = await _http.put(
+      uri,
+      headers: await _headers(
+        authenticated: authenticated,
+        idempotencyKey: idempotencyKey,
+        extraHeaders: extraHeaders,
+      ),
+      body: jsonEncode(body),
+    );
+    return _parse(response, decode, method: 'PUT', uri: uri);
+  }
+
+  Future<void> postNoContent(
+    String path, {
+    bool authenticated = true,
+    String? idempotencyKey,
+    Map<String, String>? extraHeaders,
+  }) async {
+    final uri = _uri(path);
+    final response = await _http.post(
+      uri,
+      headers: await _headers(
+        authenticated: authenticated,
+        idempotencyKey: idempotencyKey,
+        extraHeaders: extraHeaders,
+      ),
+    );
+    _parseNoContent(response, method: 'POST', uri: uri);
+  }
+
+  Future<void> putNoContent(
+    String path,
+    Object body, {
+    bool authenticated = true,
+    String? idempotencyKey,
+    Map<String, String>? extraHeaders,
+  }) async {
+    final uri = _uri(path);
+    final response = await _http.put(
+      uri,
+      headers: await _headers(
+        authenticated: authenticated,
+        idempotencyKey: idempotencyKey,
+        extraHeaders: extraHeaders,
+      ),
+      body: jsonEncode(body),
+    );
+    _parseNoContent(response, method: 'PUT', uri: uri);
+  }
+
+  Future<ApiEnvelope<T>> postMultipartFile<T>(
+    String path, {
+    required Uint8List bytes,
+    required String fileName,
+    required T Function(Object? json) decode,
+    String fieldName = 'file',
+    bool authenticated = true,
+  }) async {
+    final uri = _uri(path);
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll(await _headers(authenticated: authenticated));
+    request.headers.remove('Content-Type');
+    request.files.add(
+      http.MultipartFile.fromBytes(fieldName, bytes, filename: fileName),
+    );
+
+    final streamedResponse = await _http.send(request);
+    final response = await http.Response.fromStream(streamedResponse);
+    return _parse(response, decode, method: 'POST', uri: uri);
+  }
+
   Future<void> delete(
     String path, {
     bool authenticated = true,
@@ -142,16 +222,42 @@ class ApiClient {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwError(response);
     }
+    if (response.bodyBytes.isEmpty) {
+      return ApiEnvelope<T>(data: decode(null), metadata: ApiMetadata.empty());
+    }
     final json = jsonDecode(utf8.decode(response.bodyBytes)) as JsonMap;
+    if (!json.containsKey('data') || !json.containsKey('metadata')) {
+      return ApiEnvelope<T>(data: decode(json), metadata: ApiMetadata.empty());
+    }
     return ApiEnvelope<T>(
       data: decode(json['data']),
       metadata: ApiMetadata.fromJson(json['metadata'] as JsonMap),
     );
   }
 
+  void _parseNoContent(
+    http.Response response, {
+    required String method,
+    required Uri uri,
+  }) {
+    _logResponse(method, uri, response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _throwError(response);
+    }
+  }
+
   Never _throwError(http.Response response) {
     try {
       final json = jsonDecode(utf8.decode(response.bodyBytes)) as JsonMap;
+      if (json.containsKey('title') || json.containsKey('detail')) {
+        final title = json['title'] as String? ?? 'Request failed';
+        final detail = json['detail'] as String? ?? title;
+        throw AppException(
+          detail,
+          code: title,
+          statusCode: response.statusCode,
+        );
+      }
       final error = ApiError.fromJson(json);
       final message = _friendlyErrorMessage(error);
       throw AppException(

@@ -1,4 +1,4 @@
-package com.example.xanhnow_auth_module
+package com.xanhnow.flutter
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
