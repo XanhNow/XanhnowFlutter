@@ -508,18 +508,18 @@ packages:
     dependency: "direct main"
     description:
       name: passkeys
-      sha256: bd94040657ebcc704c042720ddd0541db712000e91a45fa8a6bbb566582c405c
+      sha256: "1596fa3940c458fcd0062ce222d7fec69d9b70187a4b9e67d585e0386f73e18c"
       url: "https://pub.dev"
     source: hosted
-    version: "2.22.1"
+    version: "2.22.3"
   passkeys_android:
     dependency: transitive
     description:
       name: passkeys_android
-      sha256: dc3717c5541d464bf2271ce4427b34f88661a73893673616e8fddc126902045a
+      sha256: eac3af9fea5d56c7091c07bde29fe5a11269de33d9cb856e03975773aab485c4
       url: "https://pub.dev"
     source: hosted
-    version: "2.13.0"
+    version: "2.13.1"
   passkeys_darwin:
     dependency: transitive
     description:
@@ -717,14 +717,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
-  ua_client_hints:
-    dependency: transitive
-    description:
-      name: ua_client_hints
-      sha256: e6e302bb7c21d6a90023db61e0ec413f0810ce341bb7e2ab447ff5d61ec3d87e
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.7.0"
   uuid:
     dependency: "direct main"
     description:
