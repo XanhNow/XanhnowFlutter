@@ -11,6 +11,7 @@ enum LoginStep {
   creatingPasskeyAssertion,
   passkeyRequired,
   smartOtpRequired,
+  recoveringSmartOtp,
   revealingSmartOtp,
   verifyingSmartOtp,
   authenticated,
@@ -114,6 +115,10 @@ class LoginSmartOtpCodeSubmitted extends LoginEvent {
   List<Object?> get props => [otp];
 }
 
+class LoginSmartOtpRecoveryRequested extends LoginEvent {
+  const LoginSmartOtpRecoveryRequested();
+}
+
 class LoginCancelled extends LoginEvent {
   const LoginCancelled();
 }
@@ -130,13 +135,17 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     on<RequiredRegistrationPasskeySubmitted>(_onRequiredRegistrationPasskey);
     on<LoginSmartOtpCodeRequested>(_onLoginSmartOtpCodeRequested);
     on<LoginSmartOtpCodeSubmitted>(_onLoginSmartOtpCodeSubmitted);
+    on<LoginSmartOtpRecoveryRequested>(_onLoginSmartOtpRecoveryRequested);
     on<LoginCancelled>(_onLoginCancelled);
   }
 
   final AuthRepository _repository;
   final AuthSessionCubit _sessionCubit;
+  String? _pendingPhoneNumber;
+  String? _pendingPassword;
 
   void _onLoginCancelled(LoginCancelled event, Emitter<LoginState> emit) {
+    _clearPendingPasswordLogin();
     emit(const LoginState.initial());
   }
 
@@ -144,6 +153,8 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     PasswordLoginSubmitted event,
     Emitter<LoginState> emit,
   ) async {
+    _pendingPhoneNumber = event.phoneNumber;
+    _pendingPassword = event.password;
     emit(state.copyWith(step: LoginStep.submittingPassword));
     try {
       final result = await _repository.loginWithPassword(
@@ -176,6 +187,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       final tokens = result.tokens;
       if (result.isCompleted && tokens != null) {
         await _sessionCubit.authenticate(tokens, identity: result.identity);
+        _clearPendingPasswordLogin();
         emit(
           state.copyWith(step: LoginStep.authenticated, userId: result.userId),
         );
@@ -216,6 +228,7 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       final tokens = result.tokens;
       if (result.isCompleted && tokens != null) {
         await _sessionCubit.authenticate(tokens, identity: result.identity);
+        _clearPendingPasswordLogin();
         emit(
           state.copyWith(step: LoginStep.authenticated, userId: result.userId),
         );
@@ -332,11 +345,90 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
     }
   }
 
+  Future<void> _onLoginSmartOtpRecoveryRequested(
+    LoginSmartOtpRecoveryRequested event,
+    Emitter<LoginState> emit,
+  ) async {
+    final userId = state.userId;
+    final phoneNumber = _pendingPhoneNumber ?? state.identity?.phoneNumber;
+    final password = _pendingPassword;
+    if (userId == null || userId.isEmpty) {
+      emit(
+        state.copyWith(
+          step: LoginStep.smartOtpRequired,
+          message: 'Missing user for Smart OTP recovery.',
+        ),
+      );
+      return;
+    }
+    if (phoneNumber == null || phoneNumber.isEmpty || password == null) {
+      emit(
+        state.copyWith(
+          step: LoginStep.smartOtpRequired,
+          message:
+              'Vui lòng đăng nhập bằng mật khẩu trước, sau đó dùng passkey để khôi phục Smart OTP.',
+        ),
+      );
+      return;
+    }
+
+    emit(state.copyWith(step: LoginStep.recoveringSmartOtp, message: null));
+    try {
+      await _repository.recoverAndEnrollSmartOtpDevice(
+        userId: userId,
+        phoneNumber: phoneNumber,
+        password: password,
+      );
+      final login = await _repository.loginWithPassword(
+        phoneNumber: phoneNumber,
+        password: password,
+      );
+      final tokens = login.tokens;
+      if (login.isCompleted && tokens != null) {
+        await _sessionCubit.authenticate(
+          tokens,
+          identity: login.identity ?? state.identity,
+          notice: 'Smart OTP đã được thiết lập lại trên thiết bị này.',
+        );
+        _clearPendingPasswordLogin();
+        emit(
+          state.copyWith(
+            step: LoginStep.authenticated,
+            userId: login.userId,
+            identity: login.identity ?? state.identity,
+            clearSmartOtpChallenge: true,
+          ),
+        );
+        return;
+      }
+
+      emit(
+        state.copyWith(
+          step: LoginStep.smartOtpRequired,
+          userId: userId,
+          message: 'Smart OTP đã được thiết lập lại. Vui lòng đăng nhập lại.',
+          clearSmartOtpChallenge: true,
+        ),
+      );
+    } catch (error) {
+      emit(
+        state.copyWith(
+          step: LoginStep.smartOtpRequired,
+          userId: userId,
+          message: error.toString(),
+          clearSmartOtpChallenge: true,
+        ),
+      );
+    }
+  }
+
   Future<void> _onRequiredRegistrationPasskey(
     RequiredRegistrationPasskeySubmitted event,
     Emitter<LoginState> emit,
   ) async {
     final userId = state.userId;
+    final phoneNumber = _pendingPhoneNumber;
+    final password = _pendingPassword;
     if (userId == null || userId.isEmpty) {
       emit(
         state.copyWith(
@@ -346,18 +438,60 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
       );
       return;
     }
-
-    emit(state.copyWith(step: LoginStep.creatingPasskeyAssertion));
-    try {
-      final result = await _repository.completeMandatoryPasskey(
-        userId: userId,
-        displayName: event.displayName,
-      );
+    if (phoneNumber == null || phoneNumber.isEmpty || password == null) {
       emit(
         state.copyWith(
           step: LoginStep.passkeyRequired,
           userId: userId,
-          message: 'Registration ${result.registrationStatus}. Please log in.',
+          message: 'Vui lòng đăng nhập lại bằng mật khẩu rồi hoàn tất passkey.',
+        ),
+      );
+      return;
+    }
+
+    emit(state.copyWith(step: LoginStep.creatingPasskeyAssertion));
+    try {
+      await _repository.completeMandatoryPasskey(
+        userId: userId,
+        displayName: event.displayName,
+      );
+      final login = await _repository.loginWithPassword(
+        phoneNumber: phoneNumber,
+        password: password,
+      );
+      if (login.isMfaRequired) {
+        emit(
+          state.copyWith(
+            step: LoginStep.smartOtpRequired,
+            userId: login.userId,
+            identity: login.identity ?? state.identity,
+            message: 'Vui lòng xác thực Smart OTP để hoàn tất đăng nhập.',
+            clearSmartOtpChallenge: true,
+          ),
+        );
+        return;
+      }
+      final tokens = login.tokens;
+      if (login.isCompleted && tokens != null) {
+        await _sessionCubit.authenticate(
+          tokens,
+          identity: login.identity ?? state.identity,
+        );
+        _clearPendingPasswordLogin();
+        emit(
+          state.copyWith(
+            step: LoginStep.authenticated,
+            userId: login.userId,
+            identity: login.identity ?? state.identity,
+          ),
+        );
+        return;
+      }
+      emit(
+        state.copyWith(
+          step: LoginStep.failure,
+          userId: userId,
+          message: 'Unsupported login state after passkey: ${login.state}',
         ),
       );
     } catch (error) {
@@ -369,5 +503,10 @@ class LoginBloc extends Bloc<LoginEvent, LoginState> {
         ),
       );
     }
+  }
+
+  void _clearPendingPasswordLogin() {
+    _pendingPhoneNumber = null;
+    _pendingPassword = null;
   }
 }

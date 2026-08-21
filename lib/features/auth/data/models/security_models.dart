@@ -489,6 +489,36 @@ class StepUpGrantResponse {
   }
 }
 
+class ProtectedGrantResponse {
+  const ProtectedGrantResponse({
+    required this.grantId,
+    required this.grant,
+    required this.grantType,
+    required this.audience,
+    required this.purpose,
+    required this.expiresAtUtc,
+  });
+
+  final String grantId;
+  final String grant;
+  final String grantType;
+  final String audience;
+  final String purpose;
+  final DateTime expiresAtUtc;
+
+  factory ProtectedGrantResponse.fromJson(Object? json) {
+    final map = json as JsonMap;
+    return ProtectedGrantResponse(
+      grantId: map['grantId'] as String,
+      grant: map['grant'] as String,
+      grantType: map['grantType'] as String,
+      audience: map['audience'] as String,
+      purpose: map['purpose'] as String,
+      expiresAtUtc: DateTime.parse(map['expiresAtUtc'] as String),
+    );
+  }
+}
+
 class LogoutAllSessionsResponse {
   const LogoutAllSessionsResponse({
     required this.revokedCount,

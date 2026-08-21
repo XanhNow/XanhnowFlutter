@@ -146,6 +146,37 @@ class AuthRepository {
     return _withStoredPhoneIdentityForPasskey(result);
   }
 
+  Future<ProtectedGrantResponse> loginWithPasskeyGrant({
+    String? loginIdentifier,
+  }) async {
+    final device = await _deviceContext.current();
+    final storedRegisteredPhone = await _secureStorage.read(
+      key: _registeredPhoneNumberKey,
+    );
+    final effectiveIdentifier =
+        loginIdentifier == null || loginIdentifier.trim().isEmpty
+        ? storedRegisteredPhone
+        : loginIdentifier;
+    if (effectiveIdentifier == null || effectiveIdentifier.trim().isEmpty) {
+      throw const AppException(
+        'Vui lòng nhập số điện thoại trước khi xác thực passkey.',
+      );
+    }
+    final normalizedIdentifier = PhoneNumberNormalizer.normalizeVietnamesePhone(
+      effectiveIdentifier,
+    );
+    final begin = await _api.beginPasskeyLogin(
+      loginIdentifier: normalizedIdentifier,
+      deviceContext: device,
+    );
+    final credential = await _passkeys.authenticate(begin.publicKeyOptions);
+    return _api.finishPasskeyLoginWithGrant(
+      ceremonyId: begin.ceremonyId,
+      credential: credential,
+      deviceContext: device,
+    );
+  }
+
   Future<SecurityProfile> securityProfile() => _api.securityProfile();
 
   Future<SmartOtpDeviceStateResponse> enrollSmartOtpDevice({
@@ -154,39 +185,83 @@ class AuthRepository {
   }) async {
     return _api.withTemporaryAccessToken(
       authorizationTokens.accessToken,
-      () async {
-        final device = await _deviceContext.current();
-        final keyMaterial = await _smartOtpCrypto.prepareDeviceKey();
-        final begin = await _api.beginSmartOtpEnrollment(
-          deviceName: device.deviceName,
-          platform: _toSmartOtpPlatform(device.platform),
-          appInstanceIdHash: keyMaterial.appInstanceIdHash,
-          keyAlgorithm: keyMaterial.keyAlgorithm,
-          candidatePublicKeySpki: keyMaterial.candidatePublicKeySpki,
-          candidatePublicKeyThumbprint:
-              keyMaterial.candidatePublicKeyThumbprint,
-        );
-        final proof = await _smartOtpCrypto.signBinding(
-          userId: userId,
-          enrollmentId: begin.enrollmentId,
-          serverChallenge: begin.serverChallenge,
-          candidatePublicKeyThumbprint:
-              keyMaterial.candidatePublicKeyThumbprint,
-          appInstanceIdHash: keyMaterial.appInstanceIdHash,
-          createdAtUtc: begin.createdAtUtc,
-          expiresAtUtc: begin.expiresAtUtc,
-        );
-        final result = await _api.confirmSmartOtpEnrollment(
-          enrollmentId: begin.enrollmentId,
-          clientNonce: proof.clientNonce,
-          deviceSignature: proof.deviceSignature,
-        );
-        if (result.isEnabled) {
-          await _saveSmartOtpBinding(userId: userId, state: result);
-        }
-        return result;
-      },
+      () => _bindSmartOtpDevice(userId: userId),
     );
+  }
+
+  Future<SmartOtpDeviceStateResponse> recoverAndEnrollSmartOtpDevice({
+    required String userId,
+    required String phoneNumber,
+    required String password,
+  }) async {
+    final passkeyGrant = await loginWithPasskeyGrant(
+      loginIdentifier: phoneNumber,
+    );
+    final recoveryGrant = await _api.recoverSmartOtp(
+      userId: userId,
+      phoneNumber: PhoneNumberNormalizer.normalizeVietnamesePhone(phoneNumber),
+      password: password,
+      passkeyGrant: passkeyGrant.grant,
+    );
+    return _bindSmartOtpDevice(
+      userId: userId,
+      recoveryGrant: recoveryGrant.grant,
+    );
+  }
+
+  Future<SmartOtpDeviceStateResponse> _bindSmartOtpDevice({
+    required String userId,
+    String? recoveryGrant,
+  }) async {
+    final device = await _deviceContext.current();
+    final keyMaterial = await _smartOtpCrypto.prepareDeviceKey();
+    final begin = recoveryGrant == null
+        ? await _api.beginSmartOtpEnrollment(
+            deviceName: device.deviceName,
+            platform: _toSmartOtpPlatform(device.platform),
+            appInstanceIdHash: keyMaterial.appInstanceIdHash,
+            keyAlgorithm: keyMaterial.keyAlgorithm,
+            candidatePublicKeySpki: keyMaterial.candidatePublicKeySpki,
+            candidatePublicKeyThumbprint:
+                keyMaterial.candidatePublicKeyThumbprint,
+          )
+        : await _api.beginSmartOtpRecoveryEnrollment(
+            userId: userId,
+            recoveryGrant: recoveryGrant,
+            deviceName: device.deviceName,
+            platform: _toSmartOtpPlatform(device.platform),
+            appInstanceIdHash: keyMaterial.appInstanceIdHash,
+            keyAlgorithm: keyMaterial.keyAlgorithm,
+            candidatePublicKeySpki: keyMaterial.candidatePublicKeySpki,
+            candidatePublicKeyThumbprint:
+                keyMaterial.candidatePublicKeyThumbprint,
+          );
+    final proof = await _smartOtpCrypto.signBinding(
+      userId: userId,
+      enrollmentId: begin.enrollmentId,
+      serverChallenge: begin.serverChallenge,
+      candidatePublicKeyThumbprint: keyMaterial.candidatePublicKeyThumbprint,
+      appInstanceIdHash: keyMaterial.appInstanceIdHash,
+      createdAtUtc: begin.createdAtUtc,
+      expiresAtUtc: begin.expiresAtUtc,
+    );
+    final result = recoveryGrant == null
+        ? await _api.confirmSmartOtpEnrollment(
+            enrollmentId: begin.enrollmentId,
+            clientNonce: proof.clientNonce,
+            deviceSignature: proof.deviceSignature,
+          )
+        : await _api.confirmSmartOtpRecoveryEnrollment(
+            userId: userId,
+            recoveryGrant: recoveryGrant,
+            enrollmentId: begin.enrollmentId,
+            clientNonce: proof.clientNonce,
+            deviceSignature: proof.deviceSignature,
+          );
+    if (result.isEnabled) {
+      await _saveSmartOtpBinding(userId: userId, state: result);
+    }
+    return result;
   }
 
   Future<SmartOtpCodeChallenge> revealLoginSmartOtpCode({

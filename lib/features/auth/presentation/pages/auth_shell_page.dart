@@ -701,10 +701,12 @@ class _LoginViewState extends State<_LoginView> {
         final busy =
             state.step == LoginStep.submittingPassword ||
             state.step == LoginStep.creatingPasskeyAssertion ||
+            state.step == LoginStep.recoveringSmartOtp ||
             state.step == LoginStep.revealingSmartOtp ||
             state.step == LoginStep.verifyingSmartOtp;
         final smartOtpLogin =
             state.step == LoginStep.smartOtpRequired ||
+            state.step == LoginStep.recoveringSmartOtp ||
             state.step == LoginStep.revealingSmartOtp ||
             state.step == LoginStep.verifyingSmartOtp;
         final loginChallenge = state.smartOtpChallenge;
@@ -755,6 +757,20 @@ class _LoginViewState extends State<_LoginView> {
                     state.step == LoginStep.revealingSmartOtp
                         ? widget.text.gettingSmartOtpCode
                         : widget.text.getSmartOtpCode,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: busy
+                      ? null
+                      : () => context.read<LoginBloc>().add(
+                          const LoginSmartOtpRecoveryRequested(),
+                        ),
+                  icon: const Icon(Icons.restore_outlined),
+                  label: Text(
+                    state.step == LoginStep.recoveringSmartOtp
+                        ? widget.text.recoveringSmartOtp
+                        : widget.text.recoverSmartOtp,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -1286,6 +1302,11 @@ class _AuthText {
   String get getSmartOtpCode => _vi ? 'Lấy mã Smart OTP' : 'Get Smart OTP code';
   String get gettingSmartOtpCode =>
       _vi ? 'Đang lấy mã Smart OTP...' : 'Getting Smart OTP code...';
+  String get recoverSmartOtp => _vi
+      ? 'Khôi phục Smart OTP trên thiết bị này'
+      : 'Recover Smart OTP on this device';
+  String get recoveringSmartOtp =>
+      _vi ? 'Đang khôi phục Smart OTP...' : 'Recovering Smart OTP...';
   String get verifySmartOtpCode =>
       _vi ? 'Xác thực mã Smart OTP' : 'Verify Smart OTP code';
   String get verifyingSmartOtpCode =>

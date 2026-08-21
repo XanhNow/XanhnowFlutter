@@ -7,18 +7,22 @@ enum CustomerProfileType {
   operator,
 }
 
-enum ProfileFieldKind { text, number, date, guid, multiline }
+enum ProfileFieldKind { text, number, date, guid, image, multiline }
 
 class ProfileInputField {
   const ProfileInputField({
     required this.key,
     required this.label,
     this.kind = ProfileFieldKind.text,
+    this.required = true,
+    this.fileFieldName,
   });
 
   final String key;
   final String label;
   final ProfileFieldKind kind;
+  final bool required;
+  final String? fileFieldName;
 }
 
 extension CustomerProfileTypeContract on CustomerProfileType {
@@ -73,7 +77,8 @@ extension CustomerProfileTypeContract on CustomerProfileType {
           field.key.startsWith('currentOperatingAddress.') ||
           field.key == 'spokenLanguages' ||
           field.key == 'declaredDrivers' ||
-          field.key == 'vehiclePlateNumbers') {
+          field.key == 'vehiclePlateNumbers' ||
+          field.kind == ProfileFieldKind.image) {
         continue;
       }
       body[field.key] = _valueFor(field, values[field.key] ?? '');
@@ -149,9 +154,27 @@ class CustomerProfileSummary {
   }
 }
 
-const _identityFields = [
+const _individualDemandOnlyFields = [
   ProfileInputField(key: 'fullName', label: 'Họ và tên'),
   ProfileInputField(key: 'email', label: 'Email'),
+  ProfileInputField(key: 'citizenIdNumber', label: 'Số CCCD'),
+  ProfileInputField(
+    key: 'citizenIdFrontImage',
+    label: 'Ảnh CCCD mặt trước',
+    kind: ProfileFieldKind.image,
+    fileFieldName: 'CitizenIdFrontImage',
+  ),
+  ProfileInputField(
+    key: 'citizenIdBackImage',
+    label: 'Ảnh CCCD mặt sau',
+    kind: ProfileFieldKind.image,
+    fileFieldName: 'CitizenIdBackImage',
+  ),
+];
+
+const _identityFieldsWithOptionalEmail = [
+  ProfileInputField(key: 'fullName', label: 'Họ và tên'),
+  ProfileInputField(key: 'email', label: 'Email', required: false),
   ProfileInputField(key: 'citizenIdNumber', label: 'Số CCCD'),
   ProfileInputField(
     key: 'citizenIdFrontObjectId',
@@ -331,8 +354,6 @@ const _addressFields = [
   ),
 ];
 
-const _individualDemandOnlyFields = _identityFields;
-
 const _operatorFields = [
   ProfileInputField(key: 'fullName', label: 'Họ và tên'),
   ProfileInputField(key: 'complaintHotline', label: 'Hotline khiếu nại'),
@@ -367,14 +388,14 @@ const _organizationDemandSupplyFields = [
 ];
 
 const _individualDemandSupplyFields = [
-  ..._identityFields,
+  ..._identityFieldsWithOptionalEmail,
   ..._vehicleFields,
   ..._addressFields,
   ..._vehicleFileFields,
 ];
 
 const _organizationDriverFields = [
-  ..._identityFields,
+  ..._identityFieldsWithOptionalEmail,
   ..._vehicleFields,
   ProfileInputField(key: 'companyName', label: 'Tên công ty/nhà xe'),
   ProfileInputField(key: 'companyPhoneNumber', label: 'SĐT công ty/nhà xe'),
@@ -384,6 +405,10 @@ const _organizationDriverFields = [
 
 dynamic _valueFor(ProfileInputField field, String raw) {
   final value = raw.trim();
+  if (value.isEmpty && !field.required) {
+    return null;
+  }
+
   return switch (field.kind) {
     ProfileFieldKind.number => int.tryParse(value) ?? 0,
     _ => value,

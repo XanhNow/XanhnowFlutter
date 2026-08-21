@@ -134,6 +134,38 @@ class ProfileCubit extends Cubit<ProfileState> {
     }
   }
 
+  Future<void> saveIndividualDemandOnly(
+    Map<String, dynamic> body,
+    List<ProfileImageFile> files,
+  ) async {
+    final type = CustomerProfileType.individualDemandOnly;
+    final hasProfile = state.profile != null;
+    emit(
+      state.copyWith(
+        actionStatus: ProfileActionStatus.saving,
+        clearError: true,
+      ),
+    );
+
+    try {
+      if (hasProfile) {
+        await _repository.updateCurrentIndividualDemandOnlyProfile(body, files);
+      } else {
+        await _repository.createIndividualDemandOnlyProfile(body, files);
+      }
+      emit(state.copyWith(actionStatus: ProfileActionStatus.idle));
+      await load(type);
+    } catch (error) {
+      emit(
+        state.copyWith(
+          status: ProfileLoadStatus.failure,
+          actionStatus: ProfileActionStatus.idle,
+          errorMessage: error.toString(),
+        ),
+      );
+    }
+  }
+
   Future<void> submit() async {
     final type = state.selectedType;
     emit(

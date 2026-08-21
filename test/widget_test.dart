@@ -13,6 +13,7 @@ void main() {
           securityBaseUrl: 'https://api.ioxy.site/security',
           customerBaseUrl: 'https://api.ioxy.site/customer',
           objectStorageBaseUrl: 'https://api.ioxy.site/object-storage',
+          adminBaseUrl: 'https://api.ioxy.site/admin',
           contractVersion: 'v1',
         ),
       ),
@@ -21,4 +22,3 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }
-

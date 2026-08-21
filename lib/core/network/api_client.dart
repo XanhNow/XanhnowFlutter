@@ -10,6 +10,18 @@ import 'api_result.dart';
 
 typedef JsonMap = Map<String, dynamic>;
 
+class MultipartFilePayload {
+  const MultipartFilePayload({
+    required this.fieldName,
+    required this.bytes,
+    required this.fileName,
+  });
+
+  final String fieldName;
+  final Uint8List bytes;
+  final String fileName;
+}
+
 class ApiClient {
   ApiClient({
     required String baseUrl,
@@ -44,13 +56,20 @@ class ApiClient {
     String path,
     T Function(Object? json) decode, {
     bool authenticated = true,
+    bool suppressNotFoundLog = false,
   }) async {
     final uri = _uri(path);
     final response = await _http.get(
       uri,
       headers: await _headers(authenticated: authenticated),
     );
-    return _parse(response, decode, method: 'GET', uri: uri);
+    return _parse(
+      response,
+      decode,
+      method: 'GET',
+      uri: uri,
+      suppressNotFoundLog: suppressNotFoundLog,
+    );
   }
 
   Future<ApiEnvelope<T>> post<T>(
@@ -154,6 +173,40 @@ class ApiClient {
     return _parse(response, decode, method: 'POST', uri: uri);
   }
 
+  Future<ApiEnvelope<T>> postMultipart<T>(
+    String path, {
+    required Map<String, String> fields,
+    required List<MultipartFilePayload> files,
+    required T Function(Object? json) decode,
+    bool authenticated = true,
+  }) {
+    return _sendMultipart(
+      'POST',
+      path,
+      fields: fields,
+      files: files,
+      decode: decode,
+      authenticated: authenticated,
+    );
+  }
+
+  Future<void> putMultipartNoContent(
+    String path, {
+    required Map<String, String> fields,
+    required List<MultipartFilePayload> files,
+    bool authenticated = true,
+  }) async {
+    final envelope = await _sendMultipart<void>(
+      'PUT',
+      path,
+      fields: fields,
+      files: files,
+      decode: (_) {},
+      authenticated: authenticated,
+    );
+    return envelope.data;
+  }
+
   Future<void> delete(
     String path, {
     bool authenticated = true,
@@ -176,6 +229,34 @@ class ApiClient {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwError(response);
     }
+  }
+
+  Future<ApiEnvelope<T>> _sendMultipart<T>(
+    String method,
+    String path, {
+    required Map<String, String> fields,
+    required List<MultipartFilePayload> files,
+    required T Function(Object? json) decode,
+    required bool authenticated,
+  }) async {
+    final uri = _uri(path);
+    final request = http.MultipartRequest(method, uri);
+    request.headers.addAll(await _headers(authenticated: authenticated));
+    request.headers.remove('Content-Type');
+    request.fields.addAll(fields);
+    for (final file in files) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          file.fieldName,
+          file.bytes,
+          filename: file.fileName,
+        ),
+      );
+    }
+
+    final streamedResponse = await _http.send(request);
+    final response = await http.Response.fromStream(streamedResponse);
+    return _parse(response, decode, method: method, uri: uri);
   }
 
   Uri _uri(String path) {
@@ -217,8 +298,14 @@ class ApiClient {
     T Function(Object? json) decode, {
     required String method,
     required Uri uri,
+    bool suppressNotFoundLog = false,
   }) {
-    _logResponse(method, uri, response);
+    _logResponse(
+      method,
+      uri,
+      response,
+      suppressNotFoundLog: suppressNotFoundLog,
+    );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       _throwError(response);
     }
@@ -285,8 +372,16 @@ class ApiClient {
     return error.message;
   }
 
-  void _logResponse(String method, Uri uri, http.Response response) {
+  void _logResponse(
+    String method,
+    Uri uri,
+    http.Response response, {
+    bool suppressNotFoundLog = false,
+  }) {
     if (!kDebugMode) {
+      return;
+    }
+    if (suppressNotFoundLog && response.statusCode == 404) {
       return;
     }
     final requestId = response.headers['x-request-id'];

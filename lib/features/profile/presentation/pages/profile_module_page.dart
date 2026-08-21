@@ -2,21 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../app/home_page.dart';
 import '../../data/models/profile_models.dart';
 import '../../domain/profile_repository.dart';
 import '../bloc/profile_cubit.dart';
+import 'personal_profile_page.dart';
 
 const _profileTextColor = Color(0xFF0B2F4A);
 
 class ProfileModulePage extends StatelessWidget {
-  const ProfileModulePage({super.key});
+  const ProfileModulePage({
+    this.initialType = CustomerProfileType.individualDemandOnly,
+    super.key,
+  });
+
+  final CustomerProfileType initialType;
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) =>
           ProfileCubit(repository: context.read<ProfileRepository>())
-            ..load(CustomerProfileType.individualDemandOnly),
+            ..load(initialType),
       child: const _ProfileModuleView(),
     );
   }
@@ -31,9 +38,14 @@ class _ProfileModuleView extends StatefulWidget {
 
 class _ProfileModuleViewState extends State<_ProfileModuleView> {
   final _controllers = <String, TextEditingController>{};
+  final _selectedImages = <String, ProfileImageFile>{};
   final _imagePicker = ImagePicker();
   CustomerProfileType? _syncedType;
   String? _syncedProfileId;
+  String? _localMessage;
+  bool _localMessageIsError = false;
+  bool _saveInProgress = false;
+  bool _navigatedAfterSave = false;
 
   @override
   void dispose() {
@@ -49,8 +61,38 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
       listenWhen: (previous, current) =>
           previous.selectedType != current.selectedType ||
           previous.profile?.id != current.profile?.id ||
-          previous.status != current.status,
-      listener: (_, state) => _syncControllers(state),
+          previous.status != current.status ||
+          previous.actionStatus != current.actionStatus ||
+          previous.errorMessage != current.errorMessage,
+      listener: (context, state) {
+        _syncControllers(state);
+        final errorMessage = state.errorMessage;
+        if (state.status == ProfileLoadStatus.failure &&
+            errorMessage != null &&
+            errorMessage.isNotEmpty) {
+          _saveInProgress = false;
+          _showLocalMessage(errorMessage, isError: true);
+        }
+        if (_saveInProgress &&
+            state.actionStatus == ProfileActionStatus.idle &&
+            state.status == ProfileLoadStatus.loaded &&
+            state.profile != null) {
+          _saveInProgress = false;
+          if (!_navigatedAfterSave) {
+            _navigatedAfterSave = true;
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute<void>(
+                builder: (_) => PersonalProfilePage(type: state.selectedType),
+              ),
+            );
+            return;
+          }
+          _showLocalMessage('Đã lưu hồ sơ. Profile ID: ${state.profile!.id}');
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã lưu hồ sơ thành công')),
+          );
+        }
+      },
       builder: (context, state) {
         _syncControllers(state);
         final isBusy =
@@ -110,6 +152,13 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
                     const SizedBox(height: 16),
                     _ProfileStatusPanel(state: state),
                     const SizedBox(height: 16),
+                    if (_localMessage != null) ...[
+                      _InlineMessage(
+                        message: _localMessage!,
+                        isError: _localMessageIsError,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     ...state.selectedType.fields.map(
                       (field) => _buildField(context, state, field),
                     ),
@@ -117,11 +166,7 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
                     FilledButton.icon(
                       onPressed: isBusy
                           ? null
-                          : () {
-                              context.read<ProfileCubit>().save(
-                                state.selectedType.buildRequest(_formValues()),
-                              );
-                            },
+                          : () => _saveProfile(context, state),
                       icon:
                           isBusy &&
                               state.actionStatus == ProfileActionStatus.saving
@@ -133,6 +178,18 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
                       label: Text(
                         state.profile == null ? 'Tạo hồ sơ' : 'Cập nhật hồ sơ',
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: isBusy ? null : _resetForm,
+                      icon: const Icon(Icons.refresh_outlined),
+                      label: const Text('Reset form'),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: isBusy ? null : () => _goHome(context),
+                      icon: const Icon(Icons.close_outlined),
+                      label: const Text('Hủy'),
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
@@ -181,18 +238,26 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
         minLines: field.kind == ProfileFieldKind.multiline ? 3 : 1,
         maxLines: field.kind == ProfileFieldKind.multiline ? 6 : 1,
         decoration: InputDecoration(
-          labelText: field.label,
+          labelText: field.required
+              ? field.label
+              : '${field.label} (không bắt buộc)',
           helperText: switch (field.kind) {
             ProfileFieldKind.guid => 'Upload ảnh lên MinIO để lấy objectId',
+            ProfileFieldKind.image =>
+              'Chọn ảnh, Customer API sẽ upload qua Object Storage',
             ProfileFieldKind.date => 'Backend nhận DateOnly dạng yyyy-mm-dd',
             _ => null,
           },
-          suffixIcon: field.kind == ProfileFieldKind.guid
+          suffixIcon:
+              field.kind == ProfileFieldKind.guid ||
+                  field.kind == ProfileFieldKind.image
               ? IconButton(
-                  tooltip: 'Upload ảnh',
+                  tooltip: field.kind == ProfileFieldKind.image
+                      ? 'Chọn ảnh'
+                      : 'Upload ảnh',
                   onPressed: isUploading
                       ? null
-                      : () => _pickAndUpload(context, field),
+                      : () => _pickAndUpload(context, state, field),
                   icon: isUploading
                       ? const SizedBox.square(
                           dimension: 18,
@@ -208,6 +273,7 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
 
   Future<void> _pickAndUpload(
     BuildContext context,
+    ProfileState state,
     ProfileInputField field,
   ) async {
     final source = await showModalBottomSheet<ImageSource>(
@@ -238,15 +304,35 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
 
     final picked = await _imagePicker.pickImage(
       source: source,
-      imageQuality: 85,
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 70,
     );
     if (picked == null || !context.mounted) {
       return;
     }
 
+    final pickedBytes = await picked.readAsBytes();
+    if (!context.mounted) {
+      return;
+    }
+
+    if (field.kind == ProfileFieldKind.image) {
+      _selectedImages[field.key] = ProfileImageFile(
+        fieldName: field.fileFieldName ?? field.key,
+        bytes: pickedBytes,
+        fileName: picked.name,
+      );
+      _controllerFor(field.key).text = picked.name;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Đã chọn ${field.label}')));
+      return;
+    }
+
     final objectId = await context.read<ProfileCubit>().uploadImage(
       fieldKey: field.key,
-      bytes: await picked.readAsBytes(),
+      bytes: pickedBytes,
       fileName: picked.name,
     );
     if (!context.mounted || objectId == null || objectId.isEmpty) {
@@ -259,6 +345,38 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
     ).showSnackBar(SnackBar(content: Text('Đã upload ${field.label}')));
   }
 
+  void _saveProfile(BuildContext context, ProfileState state) {
+    final validationMessage = _validateBeforeSave(state);
+    if (validationMessage != null) {
+      _showLocalMessage(validationMessage, isError: true);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(validationMessage)));
+      return;
+    }
+
+    final body = state.selectedType.buildRequest(_formValues());
+    _saveInProgress = true;
+    _showLocalMessage(
+      state.profile == null ? 'Đang tạo hồ sơ...' : 'Đang cập nhật hồ sơ...',
+    );
+
+    if (state.selectedType != CustomerProfileType.individualDemandOnly) {
+      context.read<ProfileCubit>().save(body);
+      return;
+    }
+
+    final requiredImageFields = state.selectedType.fields
+        .where((field) => field.kind == ProfileFieldKind.image)
+        .toList(growable: false);
+    context.read<ProfileCubit>().saveIndividualDemandOnly(
+      body,
+      requiredImageFields
+          .map((field) => _selectedImages[field.key]!)
+          .toList(growable: false),
+    );
+  }
+
   TextEditingController _controllerFor(String key) {
     return _controllers.putIfAbsent(key, TextEditingController.new);
   }
@@ -269,6 +387,21 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
     };
   }
 
+  void _resetForm() {
+    for (final controller in _controllers.values) {
+      controller.clear();
+    }
+    _selectedImages.clear();
+    _showLocalMessage('Đã reset form.');
+  }
+
+  void _goHome(BuildContext context) {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const HomePage()),
+      (_) => false,
+    );
+  }
+
   void _syncControllers(ProfileState state) {
     final profileId = state.profile?.id;
     if (_syncedType == state.selectedType && _syncedProfileId == profileId) {
@@ -277,11 +410,87 @@ class _ProfileModuleViewState extends State<_ProfileModuleView> {
 
     _syncedType = state.selectedType;
     _syncedProfileId = profileId;
+    _selectedImages.clear();
 
     for (final field in state.selectedType.fields) {
       _controllerFor(field.key).text =
           state.profile?.stringValue(field.key) ?? '';
     }
+  }
+
+  String? _validateBeforeSave(ProfileState state) {
+    for (final field in state.selectedType.fields) {
+      if (!field.required) {
+        continue;
+      }
+      if (field.kind == ProfileFieldKind.image) {
+        if (!_selectedImages.containsKey(field.key)) {
+          return 'Vui lòng chọn ${field.label}.';
+        }
+        continue;
+      }
+      final value = _controllerFor(field.key).text.trim();
+      if (value.isEmpty) {
+        return 'Vui lòng nhập ${field.label}.';
+      }
+    }
+    return null;
+  }
+
+  void _showLocalMessage(String message, {bool isError = false}) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _localMessage = message;
+      _localMessageIsError = isError;
+    });
+  }
+}
+
+class _InlineMessage extends StatelessWidget {
+  const _InlineMessage({required this.message, required this.isError});
+
+  final String message;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isError
+            ? colorScheme.errorContainer
+            : colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.info_outline,
+              color: isError
+                  ? colorScheme.onErrorContainer
+                  : colorScheme.onPrimaryContainer,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: TextStyle(
+                  color: isError
+                      ? colorScheme.onErrorContainer
+                      : colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

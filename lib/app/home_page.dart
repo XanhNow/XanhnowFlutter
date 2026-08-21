@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../core/session/auth_session_cubit.dart';
+import '../features/admin/presentation/pages/admin_recovery_page.dart';
 import '../features/auth/domain/auth_repository.dart';
 import '../features/auth/presentation/pages/auth_shell_page.dart';
-import '../features/profile/presentation/pages/profile_module_page.dart';
+import '../features/profile/presentation/pages/personal_profile_page.dart';
 
 const _homeTextColor = Color(0xFF0B2F4A);
 
@@ -166,12 +167,24 @@ class _HomePageState extends State<HomePage> {
                 onPressed: () {
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
-                      builder: (_) => const ProfileModulePage(),
+                      builder: (_) => const PersonalProfilePage(),
                     ),
                   );
                 },
                 icon: const Icon(Icons.assignment_ind_outlined),
-                label: const Text('Mở Profile Module'),
+                label: const Text('Mở hồ sơ cá nhân'),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AdminRecoveryPage(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.admin_panel_settings_outlined),
+                label: const Text('Admin khôi phục tài khoản'),
               ),
             ],
           ),

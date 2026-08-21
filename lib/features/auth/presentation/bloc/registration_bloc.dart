@@ -293,10 +293,15 @@ class RegistrationBloc extends Bloc<RegistrationEvent, RegistrationState> {
   }
 
   bool _isRegistrationAlreadyCompleted(AppException error) {
-    return error.statusCode == 409 &&
-        (error.code == 'CONFLICT' ||
-            error.code == 'SECURITY_REGISTRATION_ALREADY_COMPLETED') &&
-        error.message.contains('Registration has already been completed');
+    if (error.statusCode != 409) {
+      return false;
+    }
+    final code = error.code ?? '';
+    final message = error.message.toLowerCase();
+    return code == 'CONFLICT' ||
+        code == 'SECURITY_REGISTRATION_ALREADY_COMPLETED' ||
+        (message.contains('registration') &&
+            (message.contains('already') || message.contains('completed')));
   }
 
   Future<void> _onSmartOtpSkipped(

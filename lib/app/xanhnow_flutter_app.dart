@@ -7,6 +7,8 @@ import '../core/network/api_client.dart';
 import '../core/session/auth_session_cubit.dart';
 import '../core/storage/auth_identity_store.dart';
 import '../core/storage/secure_token_store.dart';
+import '../features/admin/data/admin_recovery_api.dart';
+import '../features/admin/domain/admin_recovery_repository.dart';
 import '../features/auth/data/passkey_ceremony_service.dart';
 import '../features/auth/data/security_auth_api.dart';
 import '../features/auth/data/smart_otp_device_crypto_service.dart';
@@ -60,10 +62,22 @@ class XanhNowFlutterApp extends StatelessWidget {
           ),
         ),
         RepositoryProvider(
+          create: (context) => AdminRecoveryApi(
+            ApiClient(
+              baseUrl: config.adminBaseUrl,
+              tokenStore: context.read<SecureTokenStore>(),
+            ),
+          ),
+        ),
+        RepositoryProvider(
           create: (context) => ProfileRepository(
             api: context.read<CustomerProfileApi>(),
             objectStorageApi: context.read<ObjectStorageApi>(),
           ),
+        ),
+        RepositoryProvider(
+          create: (context) =>
+              AdminRecoveryRepository(api: context.read<AdminRecoveryApi>()),
         ),
         RepositoryProvider(
           create: (context) => AuthRepository(

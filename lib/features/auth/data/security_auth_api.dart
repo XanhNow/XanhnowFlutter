@@ -124,6 +124,46 @@ class SecurityAuthApi {
     return response.data;
   }
 
+  Future<ProtectedGrantResponse> finishPasskeyLoginWithGrant({
+    required String ceremonyId,
+    required JsonMap credential,
+    required DeviceContext deviceContext,
+    String audience = 'xanhnow',
+  }) async {
+    final response = await _client.post(
+      '/api/v1/auth/login/passkey/finish-grant',
+      {
+        'ceremonyId': ceremonyId,
+        'credential': credential,
+        'audience': audience,
+        'deviceContext': deviceContext.toJson(),
+      },
+      ProtectedGrantResponse.fromJson,
+      authenticated: false,
+    );
+    return response.data;
+  }
+
+  Future<ProtectedGrantResponse> recoverSmartOtp({
+    required String userId,
+    required String phoneNumber,
+    required String password,
+    required String passkeyGrant,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/auth/login/smart-otp/recovery/reset',
+      {
+        'userId': userId,
+        'phoneNumber': phoneNumber,
+        'password': password,
+        'passkeyGrant': passkeyGrant,
+      },
+      ProtectedGrantResponse.fromJson,
+      authenticated: false,
+    );
+    return response.data;
+  }
+
   Future<SecurityProfile> securityProfile() async {
     final response = await _client.get(
       '/api/v1/accounts/me/security-profile',
@@ -163,6 +203,56 @@ class SecurityAuthApi {
           'clientNonce': clientNonce,
           'deviceSignature': deviceSignature,
         }, SmartOtpDeviceStateResponse.fromJson);
+    return response.data;
+  }
+
+  Future<BeginSmartOtpEnrollmentResponse> beginSmartOtpRecoveryEnrollment({
+    required String userId,
+    required String recoveryGrant,
+    required String deviceName,
+    required String platform,
+    required String appInstanceIdHash,
+    required String keyAlgorithm,
+    required String candidatePublicKeySpki,
+    required String candidatePublicKeyThumbprint,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/auth/login/smart-otp/recovery/enroll/begin',
+      {
+        'userId': userId,
+        'recoveryGrant': recoveryGrant,
+        'deviceName': deviceName,
+        'platform': platform,
+        'appInstanceIdHash': appInstanceIdHash,
+        'keyAlgorithm': keyAlgorithm,
+        'candidatePublicKeySpki': candidatePublicKeySpki,
+        'candidatePublicKeyThumbprint': candidatePublicKeyThumbprint,
+      },
+      BeginSmartOtpEnrollmentResponse.fromJson,
+      authenticated: false,
+    );
+    return response.data;
+  }
+
+  Future<SmartOtpDeviceStateResponse> confirmSmartOtpRecoveryEnrollment({
+    required String userId,
+    required String recoveryGrant,
+    required String enrollmentId,
+    required String clientNonce,
+    required String deviceSignature,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/auth/login/smart-otp/recovery/enroll/confirm',
+      {
+        'userId': userId,
+        'recoveryGrant': recoveryGrant,
+        'enrollmentId': enrollmentId,
+        'clientNonce': clientNonce,
+        'deviceSignature': deviceSignature,
+      },
+      SmartOtpDeviceStateResponse.fromJson,
+      authenticated: false,
+    );
     return response.data;
   }
 
